@@ -1,32 +1,10 @@
 #include "server.h"
+#include "engine.h"
+#include "handler.h"
 
-#include <limits.h>
-#include <stdarg.h>
-#include <sys/select.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/time.h>
+#include <pthread.h>
 
-void error(char* error_message){
-    perror(error_message);
-    exit(1);
-}
-
-struct timeval get_time_to_wait(struct timespec end_time){
-    struct timespec current_time;
-    clock_gettime(CLOCK_REALTIME, &current_time);
-
-    ll ctotal_time = current_time.tv_sec * 1000 + current_time.tv_nsec / 1000000; // in milliseconds
-    ll ptotal_time = end_time.tv_sec * 1000 + end_time.tv_nsec / 1000000;  // in milliseconds
-    ll diff_time   = ptotal_time - ctotal_time; // in milliseconds
-
-    struct timeval to_wait;
-    to_wait.tv_sec = diff_time / 1000;
-    to_wait.tv_usec = (diff_time % 1000) * 1000;
-    return to_wait;
-}
-
-int init_server(int16_t port, int clients_count){
+int init_server(int16_t port, int players_count){
     int serverfd; 
     struct sockaddr_in servaddr; 
    
@@ -49,20 +27,20 @@ int init_server(int16_t port, int clients_count){
     servaddr.sin_port = htons(port); 
    
     if ((bind(serverfd, (SA*)&servaddr, sizeof(servaddr))) != 0) error("Cannot bind server socket\n");
-    if ((listen(serverfd, clients_count)) != 0) error("Listen failed...\n");
+    if ((listen(serverfd, players_count)) != 0) error("Listen failed...\n");
 
 
     return serverfd;
 }
 
-int* wait_clients(int serverfd, int clients_count){
-    printf("Waiting %d clients connection...\n\n", clients_count);
+int* wait_clients(int serverfd, int players_count){
+    printf("Waiting %d clients connection...\n\n", players_count);
 
     int connected = 0;
     int clientlen;
-    int* clientsfd =  calloc(clients_count, sizeof(int));
+    int* clientsfd =  calloc(players_count, sizeof(int));
 
-    while (connected < clients_count){
+    while (connected < players_count){
         struct sockaddr_in client;
         clientlen = sizeof(client);
         clientsfd[connected] = accept(serverfd, (SA*)&client, (SL*) &clientlen);
@@ -76,134 +54,84 @@ int* wait_clients(int serverfd, int clients_count){
     return clientsfd;
 }
 
-void print_snakes(snake* snakes, int snakes_count){
-    for (size_t i = 0; i < snakes_count; i++){
-        printf("Snake %zu created in:\n", i);
-        for (size_t j = 0; j < 5; j++){
-            printf("\tx%zu:%hu y%zu:%hu\n", j, snakes[i].body[j].x, j, snakes[i].body[j].y);
-        }
-    }
-}
-
-// TODO: Implement better spawn logic
-snake* generate_snakes(vector2 field, int snakes_count){
-    printf("Creating %d snakes...\n", snakes_count);
-    if (field.y * 2 < snakes_count) error("Too much snakes to create!\n");
-    if (field.x < 20) error("Field is too small!\n");
-
-    snake* snakes = calloc(snakes_count, sizeof(snake));
-    for (size_t i = 0; i < snakes_count; i++){
-        printf("Snake %zu created in:\n", i);
-        for (size_t j = 0; j < 5; j++){
-            snakes[i].body[j].x = 10 + j;
-            snakes[i].body[j].y = i*2 + 1;
-            snakes[i].direction = MOVE_LEFT;
-            printf("\tx%zu:%lu y%zu:%lu\n", i, 4+j, i, i*2);
-        }
-    }
-    
-    printf("\n");
-    return snakes;
-}
-
-char* create_message(imessage_header header, snake* snakes, int* total_size){
-    *total_size = header.clients_count * sizeof(snake) + sizeof(imessage_header);
-    char* return_imessage = calloc(*total_size, sizeof(char));
-    memcpy(return_imessage, &header, sizeof(imessage_header));
-    memcpy(return_imessage + sizeof(imessage_header), snakes, sizeof(snake) * header.clients_count);
-    return return_imessage;
-}
-
-int send_imessages(int start_delay, struct timespec timestamp, int frame_delay, int clients_count, vector2 field, snake* snakes, int* clientsfd){
+int send_imessages(int start_delay, struct timespec timestamp, int frame_delay, int players_count, vector2 field, snake* snakes, int* clientsfd){
     imessage_header header;
     header.magic = 0x30;
     header.timestamp = timestamp;
     header.frame_delay = frame_delay;
-    header.clients_count = clients_count;
+    header.players_count = players_count;
     header.position = field;
 
     printf("Sending IMessages...\n");
-    for (size_t i = 0; i < clients_count; i++){
+    for (size_t i = 0; i < players_count; i++){
         header.user_id = i;
 
         int total_size;
-        char* imessage = create_message(header, snakes, &total_size);
+        char* imessage = create_imessage(header, snakes, &total_size);
         write(clientsfd[i], imessage, total_size);
         printf("IMessage sent to client %zu\n", i);
         free(imessage);
     }
-    return clients_count;
+    return players_count;
 }
 
-char read_last_direction(char* buf, int size){
-    for (int i = size - 1; i >= 0; i--){
-        printf("Buf[%d]: %d\n", i, buf[i]);
-        switch (buf[i]){
-            case MOVE_UP:
-                return MOVE_UP;
-            case MOVE_DOWN:
-                return MOVE_DOWN;
-            case MOVE_RIGTH:
-                return MOVE_RIGTH;
-            case MOVE_LEFT:
-                return MOVE_LEFT;
-        }
-    }
-    return MOVE_LEFT;
-}
-
-void send_snakes(snake* snakes, int* clientsfd, int clients_count){
-    for (size_t i = 0; i < clients_count; i++){
+void send_snakes(player* players, int players_count){
+    pthread_mutex_lock(&mutex_remaing_players_count);
+    for (size_t i = 0; i < players_count; i++){
+        if(!players[i].connected) continue;
         send_sheader sh;
         sh.magic = 0x50;
-        sh.snake_count = clients_count;
-        write(clientsfd[i], &sh, sizeof(send_sheader));
-        for (size_t j = 0; j < clients_count; j++){
-            send_sbody cs;
-            cs.s = snakes[j];
-            cs.s_id = j;
-            write(clientsfd[i], &cs, sizeof(send_sbody));
+        sh.snake_count = remaining_players_count;
+        write(players[i].clientfd, &sh, sizeof(send_sheader));
+        for (size_t j = 0; j < players_count; j++){
+            if(!players[j].connected) continue;
+
+            int total_size;
+            char* smessage = create_smeesage(&(players[j]), &total_size);
+            write(players[i].clientfd, smessage, total_size);
+            free(smessage);
         }
     }
+    pthread_mutex_unlock(&mutex_remaing_players_count);
 }
 
-void move_tail(snake* s, int size){
-    int prev_x = s->body[0].x;
-    int prev_y = s->body[0].y;
-    int dir_x = 0;
-    int dir_y = 0;
-    switch (s->direction){
-        case MOVE_UP:
-            dir_y = -1;
-            break;
-        case MOVE_DOWN:
-            dir_y = 1;
-            break;
-        case MOVE_LEFT:
-            dir_x = -1;
-            break;
-        case MOVE_RIGTH:
-            dir_x = 1;
-            break;
+void remove_player(player* p){
+    pthread_mutex_lock(&mutex_remaing_players_count);
+    if (!p->connected){
+        pthread_mutex_unlock(&mutex_remaing_players_count);
+        return;
     }
-    s->body[0].x += dir_x;
-    s->body[0].y += dir_y;
+    p->connected = false;
+    close(p->clientfd);
 
-    for (size_t i = 1; i < size; i++){
-        int t_x = s->body[i].x;
-        int t_y = s->body[i].y;
+    remaining_players_count--;
+    printf("Client %hhd disconected!\n", p->data.id);
 
-        s->body[i].x = prev_x;
-        s->body[i].y = prev_y;
-
-        prev_x = t_x;
-        prev_y = t_y;
-    }
+    pthread_mutex_unlock(&mutex_remaing_players_count);
 }
 
-void game_loop(int serverfd, struct timespec timeout, ll frame_delay, int* clientsfd, snake *snakes, int clients_count){
+void* handle_player(void* args){
+    char buf[BUFSIZE];
+    player* p = args;
+    int readed;
+    while((readed = read(p->clientfd, buf, BUFSIZE)) > 0){
+        char new_dir = get_last_direction(buf, readed);
+        if (is_opposite_directions(new_dir, p->data.snake.direction)) continue;
+
+        p->data.snake.direction = new_dir;
+        
+        printf("Snake %hhd changed direction to %d\n", p->data.id, p->data.snake.direction);
+    }
+    remove_player(p);
+    printf("Thread is done!\n");
+    return NULL;
+}
+
+void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *players, int players_count){
+    srand((unsigned int) time(NULL));
+
     int max_fd = serverfd;
-    for (size_t i = 0; i < clients_count; i++)
+    for (size_t i = 0; i < players_count; i++)
         if (clientsfd[i] > max_fd) max_fd = clientsfd[i];
 
 
@@ -211,56 +139,38 @@ void game_loop(int serverfd, struct timespec timeout, ll frame_delay, int* clien
     struct timeval to_wait = get_time_to_wait(timeout);
     select(max_fd+1, NULL, NULL, NULL, &to_wait);
 
-    ll recieve_delay = frame_delay / 2;
-    ll send_delay = frame_delay - recieve_delay;
+    vector2 fruit = get_fruit(field);
+    while (remaining_players_count > 0){
+        printf("Current fruit in x:%hu y:%hu\n", fruit.x, fruit.y);
+        send_snakes(players, players_count);
 
-    char buf[BUFSIZE];
-
-    while (1){
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        for (size_t i = 0; i < clients_count; i++){
-            FD_SET(clientsfd[i], &readfds);
-        }
-
-        timeout.tv_nsec += recieve_delay * 1000000;
-        to_wait = get_time_to_wait(timeout);
-
-        if (select(max_fd + 1, &readfds, NULL, NULL, &to_wait) < 0) error("Error with select...\n");
-        for (size_t i = 0; i < clients_count; i++){
-            if (FD_ISSET(clientsfd[i], &readfds)){
-                int readed = read(clientsfd[i], buf, BUFSIZE);
-                if (readed > 0){
-                    snakes[i].direction = read_last_direction(buf, readed);
-                    printf("Snake %zu changed direction to %d\n", i, snakes[i].direction);
-                } else {
-                    printf("Client %zu disconected!\n", i);
-                    exit(0);
-                }
+        for (size_t i = 0; i < players_count; i++){
+            if (!players[i].connected) continue;
+            if (i == 0){
+                move_tail(&players[i].data.snake);
             }
-            move_tail(&snakes[i], 5);
+
+            print_player(players[i]);
+            if(check_collisions(i, players, players_count, field)){
+                remove_player(&players[i]);
+            }
         }
-        printf("All mesages are recieved!\n");
 
-        timeout.tv_nsec += send_delay * 1000000;
+        // for (size_t i = 0; i < players_count; i++){
+        //     if (vector_cmp(players[i].data.snake.body[0], fruit)){
+        //         increase_snake(&players[i].data.snake);
+        //         fruit = get_fruit(field);
+        //         break;
+        //     }
+        // }
+
+        timeout.tv_nsec += frame_delay * 1000000;
         to_wait = get_time_to_wait(timeout);
-        select(max_fd+1, NULL, NULL, NULL, &to_wait);
-
-        send_snakes(snakes, clientsfd, clients_count);
-        print_snakes(snakes, clients_count);
-
-        printf("All mesages are sended!\n");
+        select(max_fd + 1, NULL, NULL, NULL, &to_wait);
     }
 }
 
 int main(int argc, char* argv[]) {
-    int port = DPORT;
-    int clients_count = DCLIENTS_COUNT;
-    int start_delay = DSTART_DELAY; // задержка перед началом игры в с
-    int frame_delay = DFRAME_DELAY; // задержка перед началом игры в мс
-    vector2 field;
-    field.x = DWIDTH;
-    field.y = DHEIGTH;
     
     int r = 0;
     while((r=getopt(argc, argv, "p:n:h:w:d:t:")) != -1){
@@ -269,7 +179,8 @@ int main(int argc, char* argv[]) {
                 port = atoi(optarg);
                 break;
             case 'n':
-                clients_count = atoi(optarg);
+                players_count = atoi(optarg);
+                remaining_players_count = players_count;
                 break;
             case 'w':
                 field.x = atoi(optarg);
@@ -286,21 +197,30 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    int serverfd = init_server((int16_t)port, clients_count);
+    int serverfd = init_server((int16_t)port, players_count);
 
     //TODO: need to close connection
-    int* clientsfd = wait_clients(serverfd, clients_count);
+    int* clientsfd = wait_clients(serverfd, players_count);
 
     struct timespec ct;
     clock_gettime(CLOCK_REALTIME, &ct);
     ct.tv_sec += start_delay;
 
-    snake* snakes = generate_snakes(field, clients_count);
-    send_imessages(start_delay, ct, frame_delay, clients_count, field, snakes, clientsfd);
+    snake* snakes = generate_snakes(field, players_count);
+    send_imessages(start_delay, ct, frame_delay, players_count, field, snakes, clientsfd);
 
-    game_loop(serverfd, ct, frame_delay, clientsfd, snakes, clients_count);
+    player *players = link_players_and_snakes(clientsfd, snakes, players_count);
 
+    pthread_mutex_init(&mutex_remaing_players_count, NULL);
+    pthread_t* th = malloc(sizeof(pthread_t) * players_count);
+    for (size_t i = 0; i < players_count; i++){
+        if (pthread_create(&th[i], NULL, &handle_player, &players[i]) != 0) perror("Failed to create the thread");
+    }
+
+    game_loop(serverfd, ct, clientsfd, players, players_count);
+    
     free(snakes);
+    free(players);
     free(clientsfd);
     close(serverfd);
 }

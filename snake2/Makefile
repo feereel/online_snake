@@ -4,9 +4,9 @@ BIN=server.exe
 
 all: clean $(BIN)
 
-%.exe:server.c
+server.exe:
 	@echo "Building $@..."
-	@$(CC) $(CFLAGS) -o $@ $<
+	$(CC) server.c engine.c handler.c $< -o $@ 
 
 clean:
 	@echo "Cleaning"
