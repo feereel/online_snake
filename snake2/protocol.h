@@ -45,9 +45,19 @@ typedef struct {
 } __attribute__((packed)) send_sheader;
 
 typedef struct {
-    uint8_t id;
+    uint16_t id;
     snake snake;
 } __attribute__((packed)) p_snake;
+
+typedef struct {
+    uint8_t magic;
+    vector2 position;
+} __attribute__((packed)) send_fdata;
+
+typedef struct {
+    uint8_t magic;
+    uint16_t place;
+} __attribute__((packed)) game_end;
 
 typedef struct {
     uint8_t clientfd;

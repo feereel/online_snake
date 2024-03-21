@@ -75,37 +75,44 @@ int send_imessages(int start_delay, struct timespec timestamp, int frame_delay, 
     return players_count;
 }
 
-void send_snakes(player* players, int players_count){
-    pthread_mutex_lock(&mutex_remaing_players_count);
-    for (size_t i = 0; i < players_count; i++){
-        if(!players[i].connected) continue;
-        send_sheader sh;
-        sh.magic = 0x50;
-        sh.snake_count = remaining_players_count;
-        write(players[i].clientfd, &sh, sizeof(send_sheader));
-        for (size_t j = 0; j < players_count; j++){
-            if(!players[j].connected) continue;
+void send_snakes(int player_id, player* players, int players_count){
+    send_sheader sh;
+    sh.magic = 0x50;
+    sh.snake_count = remaining_players_count;
+    write(players[player_id].clientfd, &sh, sizeof(send_sheader));
+    for (size_t j = 0; j < players_count; j++){
+        if(!players[j].connected) continue;
 
-            int total_size;
-            char* smessage = create_smeesage(&(players[j]), &total_size);
-            write(players[i].clientfd, smessage, total_size);
-            free(smessage);
-        }
+        int total_size;
+        char* smessage = create_smeesage(&(players[j]), &total_size);
+        write(players[player_id].clientfd, smessage, total_size);
+        free(smessage);
     }
-    pthread_mutex_unlock(&mutex_remaing_players_count);
+}
+
+void send_fruit(player player, vector2 fruit_pos){
+    send_fdata fruit;
+    fruit.magic = 0xb0;
+    fruit.position = fruit_pos;
+    write(player.clientfd, &fruit, sizeof(send_fdata));
 }
 
 void remove_player(player* p){
-    pthread_mutex_lock(&mutex_remaing_players_count);
     if (!p->connected){
         pthread_mutex_unlock(&mutex_remaing_players_count);
         return;
     }
+
+    game_end end;
+    end.magic = 0xff;
+    end.place = remaining_players_count;
+    write(p->clientfd, &end, sizeof(game_end));
+
     p->connected = false;
     close(p->clientfd);
 
     remaining_players_count--;
-    printf("Client %hhd disconected!\n", p->data.id);
+    printf("Client %hu disconected!\n", p->data.id);
 
     pthread_mutex_unlock(&mutex_remaing_players_count);
 }
@@ -120,7 +127,7 @@ void* handle_player(void* args){
 
         p->data.snake.direction = new_dir;
         
-        printf("Snake %hhd changed direction to %d\n", p->data.id, p->data.snake.direction);
+        printf("Snake %hu changed direction to %d\n", p->data.id, p->data.snake.direction);
     }
     remove_player(p);
     printf("Thread is done!\n");
@@ -141,28 +148,32 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
 
     vector2 fruit = get_fruit(field);
     while (remaining_players_count > 0){
+        bool eaten = false;
         printf("Current fruit in x:%hu y:%hu\n", fruit.x, fruit.y);
-        send_snakes(players, players_count);
 
+        pthread_mutex_lock(&mutex_remaing_players_count);
         for (size_t i = 0; i < players_count; i++){
             if (!players[i].connected) continue;
-            if (i == 0){
-                move_tail(&players[i].data.snake);
+
+            move_tail(&players[i].data.snake);
+
+            if (!eaten && vector_cmp(players[i].data.snake.body[0], fruit)){
+                increase_snake(&players[i].data.snake);
+                eaten = true;
             }
 
+            send_snakes(i, players, players_count);
+            send_fruit(players[i], fruit);
+
             print_player(players[i]);
+
             if(check_collisions(i, players, players_count, field)){
                 remove_player(&players[i]);
             }
         }
+        pthread_mutex_unlock(&mutex_remaing_players_count);
 
-        // for (size_t i = 0; i < players_count; i++){
-        //     if (vector_cmp(players[i].data.snake.body[0], fruit)){
-        //         increase_snake(&players[i].data.snake);
-        //         fruit = get_fruit(field);
-        //         break;
-        //     }
-        // }
+        if (eaten) fruit = get_fruit(field);
 
         timeout.tv_nsec += frame_delay * 1000000;
         to_wait = get_time_to_wait(timeout);
@@ -173,7 +184,8 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
 int main(int argc, char* argv[]) {
     
     int r = 0;
-    while((r=getopt(argc, argv, "p:n:h:w:d:t:")) != -1){
+
+    while((r=getopt(argc, argv, "p:n:x:y:d:t:h")) != -1){
         switch(r){
             case 'p':
                 port = atoi(optarg);
@@ -182,10 +194,10 @@ int main(int argc, char* argv[]) {
                 players_count = atoi(optarg);
                 remaining_players_count = players_count;
                 break;
-            case 'w':
+            case 'x':
                 field.x = atoi(optarg);
                 break;
-            case 'h':
+            case 'y':
                 field.y = atoi(optarg);
                 break;
             case 't':
@@ -194,6 +206,9 @@ int main(int argc, char* argv[]) {
             case 'd':
                 frame_delay = atoi(optarg);
                 break;
+            case 'h':
+                printf("%s", usage);
+                exit(0);
         }
     }
     

@@ -24,7 +24,7 @@ struct timeval get_time_to_wait(struct timespec end_time){
 }
 
 void print_player(player p){
-    printf("Player %hhd:\n", p.data.id);
+    printf("Player %hu:\n", p.data.id);
     for (size_t j = 0; j < p.data.snake.size; j++){
         printf("\tx%zu:%hu y%zu:%hu\n", j, p.data.snake.body[j].x, j, p.data.snake.body[j].y);
     }
@@ -77,13 +77,13 @@ char* create_imessage(imessage_header header, snake* snakes, int* total_size){
 }
 
 char* create_smeesage(player* p, int* total_size){
-    *total_size = sizeof(vector2) * (p->data.snake.size) + 4 * sizeof(uint8_t);
+    *total_size = sizeof(vector2) * (p->data.snake.size) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
     
     char* return_imessage = calloc(*total_size, sizeof(uint8_t));
 
     char* ptr = return_imessage;
-    memcpy(ptr, &(p->data.id), sizeof(uint8_t));
-    ptr += sizeof(uint8_t);
+    memcpy(ptr, &(p->data.id), sizeof(uint16_t));
+    ptr += sizeof(uint16_t);
 
     memcpy(ptr, &(p->data.snake.direction), sizeof(uint8_t));
     ptr += sizeof(uint8_t);

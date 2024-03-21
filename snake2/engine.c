@@ -30,8 +30,6 @@ void move_tail(snake* s){
 
     vector2 dir =  get_direction(s->direction);
 
-    printf("dir_x: %d dir_y: %d\n", dir.x, dir.y);
-    
     s->body[0].x += dir.x;
     s->body[0].y += dir.y;
 
