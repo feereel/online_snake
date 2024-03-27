@@ -33,6 +33,8 @@
 
 #define ll long long
 
+#define SNAKE_INITIAL_SIZE 7
+
 int port = DPORT;
 int players_count = DCLIENTS_COUNT;
 uint16_t remaining_players_count = DCLIENTS_COUNT;

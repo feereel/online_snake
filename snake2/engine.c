@@ -45,17 +45,10 @@ void move_tail(snake* s){
     }
 }
 
-vector2 get_fruit(vector2 field){
-    vector2 pos;
-    pos.x = (rand() % (field.x - 1)) + 1;
-    pos.y = (rand() % (field.y - 1)) + 1;
-    return pos;
-}
-
 bool check_player_collision(uint8_t player_id, player* players, int players_count){
     for (size_t i = 0; i < players_count; i++){
         for (size_t j = 0; j < players[i].data.snake.size; j++){
-            if (i == player_id) continue;
+            if (i == player_id && j == 0) continue;
             if (vector_cmp(players[player_id].data.snake.body[0], players[i].data.snake.body[j])){
                 return true;
             }

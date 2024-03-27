@@ -6,7 +6,7 @@ all: clean $(BIN)
 
 server.exe:
 	@echo "Building $@..."
-	$(CC) server.c engine.c handler.c $< -o $@ 
+	$(CC) $(CFLAGS) server.c engine.c handler.c $< -o $@ 
 
 clean:
 	@echo "Cleaning"

@@ -11,7 +11,6 @@ int init_server(int16_t port, int players_count){
     serverfd = socket(AF_INET, SOCK_STREAM, 0);
     if (serverfd == -1) error("socket creation failed...\n");
 
-
    /* setsockopt: Handy debugging trick that lets 
     * us rerun the server immediately after we kill it; 
     * otherwise we have to wait about 20 secs.
@@ -147,8 +146,8 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
     select(max_fd+1, NULL, NULL, NULL, &to_wait);
 
     vector2 fruit = get_fruit(field);
+    bool eaten = true;
     while (remaining_players_count > 0){
-        bool eaten = false;
         printf("Current fruit in x:%hu y:%hu\n", fruit.x, fruit.y);
 
         pthread_mutex_lock(&mutex_remaing_players_count);
@@ -163,7 +162,7 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
             }
 
             send_snakes(i, players, players_count);
-            send_fruit(players[i], fruit);
+            // send_fruit(players[i], fruit);
 
             print_player(players[i]);
 
@@ -173,11 +172,18 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
         }
         pthread_mutex_unlock(&mutex_remaing_players_count);
 
-        if (eaten) fruit = get_fruit(field);
+        if (eaten){
+            fruit = get_fruit(field);
+            for (size_t i = 0; i < players_count; i++){
+                send_fruit(players[i], fruit);
+            }
+        }
 
         timeout.tv_nsec += frame_delay * 1000000;
         to_wait = get_time_to_wait(timeout);
         select(max_fd + 1, NULL, NULL, NULL, &to_wait);
+
+        eaten = false;
     }
 }
 

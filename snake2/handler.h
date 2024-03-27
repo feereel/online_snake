@@ -30,4 +30,6 @@ void* handle_player(void* args);
 
 bool is_opposite_directions(uint8_t dir1, uint8_t dir2);
 
+vector2 get_fruit(vector2 field);
+
 #endif

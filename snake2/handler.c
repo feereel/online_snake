@@ -41,9 +41,10 @@ snake* generate_snakes(vector2 field, int snakes_count){
         snakes[i].size = SNAKE_INITIAL_SIZE;
         snakes[i].direction = MOVE_LEFT;
         snakes[i].body = calloc(sizeof(vector2), SNAKE_INITIAL_SIZE);
+        int x = ((rand()) % (field.x - 2 * SNAKE_INITIAL_SIZE)) + SNAKE_INITIAL_SIZE;
         for (size_t j = 0; j < SNAKE_INITIAL_SIZE; j++){
-            snakes[i].body[j].x = 7 + j;
-            snakes[i].body[j].y = i*2 + 1;
+            snakes[i].body[j].x = x + j;
+            snakes[i].body[j].y = i*4 + 1;
         }
     }
     
@@ -139,4 +140,11 @@ bool is_opposite_directions(uint8_t dir1, uint8_t dir2){
             (dir1 == MOVE_DOWN && dir2 == MOVE_UP) ||
             (dir1 == MOVE_LEFT && dir2 == MOVE_RIGTH) ||
             (dir1 == MOVE_RIGTH && dir2 == MOVE_LEFT));
+}
+
+vector2 get_fruit(vector2 field){
+    vector2 pos;
+    pos.x = (rand() % (field.x - 3)) + 1;
+    pos.y = (rand() % (field.y - 3)) + 1;
+    return pos;
 }
