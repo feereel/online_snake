@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdbool.h>
+#include <stdint.h>
+
 
 #define MOVE_UP    0x0
 #define MOVE_DOWN  0x1
