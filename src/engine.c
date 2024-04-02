@@ -1,30 +1,6 @@
 #include "engine.h"
 
-vector2 get_direction(uint8_t direction){
-    vector2 dir2;
-
-    switch (direction){
-        case MOVE_UP:
-            dir2.x = 0;
-            dir2.y = -1;
-            break;
-        case MOVE_DOWN:
-            dir2.x = 0;
-            dir2.y = 1;
-            break;
-        case MOVE_LEFT:
-            dir2.x = -1;
-            dir2.y = 0;
-            break;
-        case MOVE_RIGTH:
-            dir2.x = 1;
-            dir2.y = 0;
-            break;
-    }
-    return dir2;
-}
-
-void move_tail(snake* s){
+void move_snake(snake* s){
     int prev_x = s->body[0].x;
     int prev_y = s->body[0].y;
 

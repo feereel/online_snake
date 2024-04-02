@@ -1,8 +1,12 @@
 #include "server.h"
-#include "engine.h"
-#include "handler.h"
 
-#include <pthread.h>
+int port = DPORT;
+int players_count = DCLIENTS_COUNT;
+uint16_t remaining_players_count = DCLIENTS_COUNT;
+int start_delay = DSTART_DELAY; // задержка перед началом игры в с
+int frame_delay = DFRAME_DELAY; // задержка перед началом игры в мс
+vector2 field = {DWIDTH, DHEIGTH};
+
 
 int init_server(int16_t port, int players_count){
     int serverfd; 
@@ -53,13 +57,12 @@ int* wait_clients(int serverfd, int players_count){
     return clientsfd;
 }
 
-int send_imessages(int start_delay, struct timespec timestamp, int frame_delay, int players_count, vector2 field, snake* snakes, int* clientsfd){
+int send_imessages(int start_delay, int frame_delay, int players_count, vector2 field, snake* snakes, int* clientsfd){
     imessage_header header;
     header.magic = 0x30;
-    header.timestamp = timestamp;
     header.frame_delay = frame_delay;
     header.players_count = players_count;
-    header.position = field;
+    header.field = field;
 
     printf("Sending IMessages...\n");
     for (size_t i = 0; i < players_count; i++){
@@ -121,7 +124,7 @@ void* handle_player(void* args){
     player* p = args;
     int readed;
     while((readed = read(p->clientfd, buf, BUFSIZE)) > 0){
-        char new_dir = get_last_direction(buf, readed);
+        uint8_t new_dir = get_last_direction(buf, readed);
         if (is_opposite_directions(new_dir, p->data.snake.direction)) continue;
 
         p->data.snake.direction = new_dir;
@@ -154,15 +157,15 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
         for (size_t i = 0; i < players_count; i++){
             if (!players[i].connected) continue;
 
-            move_tail(&players[i].data.snake);
+            move_snake(&players[i].data.snake);
 
             if (!eaten && vector_cmp(players[i].data.snake.body[0], fruit)){
                 increase_snake(&players[i].data.snake);
+                send_fruit_eaten(players, players_count, i);
                 eaten = true;
             }
 
             send_snakes(i, players, players_count);
-            // send_fruit(players[i], fruit);
 
             print_player(players[i]);
 
@@ -188,7 +191,6 @@ void game_loop(int serverfd, struct timespec timeout, int* clientsfd, player *pl
 }
 
 int main(int argc, char* argv[]) {
-    
     int r = 0;
 
     while((r=getopt(argc, argv, "p:n:x:y:d:t:h")) != -1){
@@ -220,7 +222,6 @@ int main(int argc, char* argv[]) {
     
     int serverfd = init_server((int16_t)port, players_count);
 
-    //TODO: need to close connection
     int* clientsfd = wait_clients(serverfd, players_count);
 
     struct timespec ct;
@@ -228,7 +229,7 @@ int main(int argc, char* argv[]) {
     ct.tv_sec += start_delay;
 
     snake* snakes = generate_snakes(field, players_count);
-    send_imessages(start_delay, ct, frame_delay, players_count, field, snakes, clientsfd);
+    send_imessages(start_delay, frame_delay, players_count, field, snakes, clientsfd);
 
     player *players = link_players_and_snakes(clientsfd, snakes, players_count);
 

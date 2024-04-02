@@ -11,7 +11,7 @@
 #define MOVE_RIGTH 0x2
 #define MOVE_LEFT  0x3
 
-#define SNAKE_INITIAL_SIZE 7
+#define SNAKE_INITIAL_SIZE 5
 
 typedef struct {
     int16_t x;
@@ -20,9 +20,8 @@ typedef struct {
 
 typedef struct {
     uint8_t magic;
-    struct timespec timestamp;
     uint16_t frame_delay;
-    vector2 position;
+    vector2 field;
     uint16_t players_count;
     uint16_t user_id;
 } __attribute__((packed)) imessage_header;
@@ -64,5 +63,10 @@ typedef struct {
     bool connected;
     p_snake data;
 } player;
+
+typedef struct {
+    uint8_t magic;
+    uint16_t id;
+} __attribute__((packed)) snake_inc_msg;
 
 #endif

@@ -21,7 +21,16 @@ struct timeval get_time_to_wait(struct timespec end_time){
     to_wait.tv_sec = diff_time / 1000;
     to_wait.tv_usec = (diff_time % 1000) * 1000;
     return to_wait;
+
 }
+
+void print_snake(snake s){
+    for (size_t j = 0; j < s.size; j++){
+        printf("\tx%zu:%hu y%zu:%hu\n", j, s.body[j].x, j, s.body[j].y);
+        fflush(stdout);
+    }
+}
+
 
 void print_player(player p){
     printf("Player %hu:\n", p.data.id);
@@ -78,7 +87,7 @@ char* create_imessage(imessage_header header, snake* snakes, int* total_size){
 }
 
 char* create_smeesage(player* p, int* total_size){
-    *total_size = sizeof(vector2) * (p->data.snake.size) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
+    *total_size = sizeof(uint8_t) + sizeof(uint16_t);
     
     char* return_imessage = calloc(*total_size, sizeof(uint8_t));
 
@@ -88,18 +97,34 @@ char* create_smeesage(player* p, int* total_size){
 
     memcpy(ptr, &(p->data.snake.direction), sizeof(uint8_t));
     ptr += sizeof(uint8_t);
-
-    memcpy(ptr, &(p->data.snake.size), sizeof(uint16_t));
-    ptr += sizeof(uint16_t);
-
-    memcpy(ptr, p->data.snake.body, p->data.snake.size * sizeof(vector2));
-    ptr += p->data.snake.size * sizeof(vector2);
-
     
     return return_imessage;
 }
 
-char get_last_direction(char* buf, int size){
+vector2 get_direction(uint8_t direction){
+    vector2 dir2;
+    switch (direction){
+        case MOVE_UP:
+            dir2.x = 0;
+            dir2.y = -1;
+            break;
+        case MOVE_DOWN:
+            dir2.x = 0;
+            dir2.y = 1;
+            break;
+        case MOVE_LEFT:
+            dir2.x = -1;
+            dir2.y = 0;
+            break;
+        case MOVE_RIGTH:
+            dir2.x = 1;
+            dir2.y = 0;
+            break;
+    }
+    return dir2;
+}
+
+uint8_t get_last_direction(char* buf, int size){
     for (int i = size - 1; i >= 0; i--){
         printf("Buf[%d]: %d\n", i, buf[i]);
         switch (buf[i]){
@@ -114,6 +139,25 @@ char get_last_direction(char* buf, int size){
         }
     }
     return MOVE_LEFT;
+}
+
+uint8_t input_direction(void){
+    char inp = getchar();
+    switch (inp){
+    case 'w':
+        return MOVE_UP;
+        break;
+    case 's':
+        return MOVE_DOWN;
+        break;
+    case 'd':
+        return MOVE_RIGTH;
+        break;
+    case 'a':
+        return MOVE_LEFT;
+        break;  
+    }
+    return ' ';
 }
 
 player link_player_and_snake(int clientfd, p_snake s){
@@ -147,4 +191,13 @@ vector2 get_fruit(vector2 field){
     pos.x = (rand() % (field.x - 3)) + 1;
     pos.y = (rand() % (field.y - 3)) + 1;
     return pos;
+}
+
+void send_fruit_eaten(player* players, int players_count, uint16_t index){
+    snake_inc_msg msg;
+    msg.magic = 0xea;
+    msg.id = index;
+    for (size_t i = 0; i < players_count; i++){
+        write(players[i].clientfd, &msg, sizeof(snake_inc_msg));
+    }
 }

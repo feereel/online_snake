@@ -15,8 +15,12 @@
 #include <stdarg.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <pthread.h>
 
-#include "protocol.h"
+#include "../src/protocol.h"
+#include "../src/handler.h"
+#include "../src/engine.h"
+
 
 #define MAX 80 
 #define SA struct sockaddr 
@@ -32,15 +36,6 @@
 #define BUFSIZE 1024
 
 #define ll long long
-
-#define SNAKE_INITIAL_SIZE 7
-
-int port = DPORT;
-int players_count = DCLIENTS_COUNT;
-uint16_t remaining_players_count = DCLIENTS_COUNT;
-int start_delay = DSTART_DELAY; // задержка перед началом игры в с
-int frame_delay = DFRAME_DELAY; // задержка перед началом игры в мс
-vector2 field = {DWIDTH, DHEIGTH};
 
 char usage[] = "Usage: ./server.exe [-p port] [-n players_count] [-d ms] [-t sec] [-x width] [-y height]\n"
                    "\t -h Usage message\n"
