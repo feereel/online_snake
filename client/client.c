@@ -179,6 +179,6 @@ int main(int argc, char* argv[]) {
         refresh();
     }
 
-    pthread_exit(thread_kb_input);
+    pthread_exit((void*)thread_kb_input);
     close(serverfd);
 }
