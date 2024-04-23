@@ -22,10 +22,10 @@ tclient:
 	make -C $(cli)
 
 cclient:
-	$(CC) $(CFLAGS) -lncurses -o $(CLI_BIN) $(CLI_OBJ)
+	$(CC) $(CFLAGS)  -o $(CLI_BIN) $(CLI_OBJ) -lncurses
 
 cserver:
-	$(CC) $(CFLAGS) -lncurses -o $(SER_BIN) $(SER_OBJ)
+	$(CC) $(CFLAGS)  -o $(SER_BIN) $(SER_OBJ) -lncurses
 
 clean:
 	make clean -C $(src)
